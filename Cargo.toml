@@ -1,6 +1,6 @@
 [package]
 name = "formdata"
-version = "0.14.0-unstable"
+version = "0.14.0-rust-2018-edition"
 description = "Parsing of multipart/form-data"
 authors = [ "Mike Dilger <mike@optcomp.nz>" ]
 readme = "README.md"
@@ -8,6 +8,7 @@ repository = "https://github.com/mikedilger/formdata"
 documentation = "https://mikedilger.github.io/formdata"
 license = "MIT"
 keywords = ["multipart", "form-data", "hyper", "http", "mime"]
+edition = "2018"
 
 [dev-dependencies]
 tempdir = "0.3"
