@@ -32,7 +32,7 @@ impl FormData {
 
         for &(ref name, ref value) in &self.fields {
             let mut h = Headers::new();
-            h.set(ContentType(Mime(TopLevel::Text, SubLevel::Plain, vec![])));
+            h.set(ContentType::text_utf8());
             h.set(ContentDisposition {
                 disposition: DispositionType::Ext("form-data".to_owned()),
                 parameters: vec![DispositionParam::Ext("name".to_owned(), name.clone())],
@@ -47,7 +47,11 @@ impl FormData {
             let mut filepart = filepart.clone();
             // We leave all headers that the caller specified, except that we rewrite
             // Content-Disposition.
-            while filepart.headers.remove::<ContentDisposition>() { };
+            // Until hyper v0.11.0, headers.remove used to return a bool, now it
+            // returns Option<H>. Repeatedly remove until None is returned.
+            // Note that Headers will be replaced by HeaderMap in hyper 0.12,
+            // fix this code then.
+            while filepart.headers.remove::<ContentDisposition>().is_some() { };
             let filename = match filepart.path.file_name() {
                 Some(fname) => fname.to_string_lossy().into_owned(),
                 None => return Err(Error::NotAFile),

@@ -1,0 +1,8 @@
+[toolchain]
+# channel = "nightly-2024-12-15"
+# channel = "1.85.0"
+
+# Note that nightly-2025-06-20 results in to_string error from alloc
+channel = "nightly-2025-05-09"
+# channel = "1.88.0"
+# channel = "nightly-2025-06-20"
