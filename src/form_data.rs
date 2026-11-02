@@ -2,8 +2,8 @@
 // This code is licensed under the MIT license (see LICENSE-MIT for details)
 
 use mime_multipart::{Node, Part, FilePart};
-use hyper::header::{Headers, ContentDisposition, DispositionParam, DispositionType,
-                    ContentType};
+use hyper::header::{HeaderMap, HeaderValue, CONTENT_DISPOSITION, CONTENT_TYPE};
+use headers::{ContentDisposition, ContentType, HeaderMapExt};
 use mime::{Mime, TopLevel, SubLevel};
 use crate::error::Error;
 
@@ -31,14 +31,15 @@ impl FormData {
         let mut nodes: Vec<Node> = Vec::with_capacity(self.fields.len() + self.files.len());
 
         for &(ref name, ref value) in &self.fields {
-            let mut h = Headers::new();
-            h.set(ContentType::text_utf8());
-            h.set(ContentDisposition {
-                disposition: DispositionType::Ext("form-data".to_owned()),
-                parameters: vec![DispositionParam::Ext("name".to_owned(), name.clone())],
-            });
+            let mut headersmap = HeaderMap::new();
+            //headersmap.typed_insert(ContentType::text_utf8());
+            headersmap.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+            let val_str = format!(r#"form-data; name="name"; filename="{}""#, name);
+            if let Ok(hv) = HeaderValue::from_str(&val_str) {
+                headersmap.insert(CONTENT_DISPOSITION, hv);
+            }
             nodes.push( Node::Part( Part {
-                headers: h,
+                headers: headersmap,
                 body: value.as_bytes().to_owned(),
             }));
         }
@@ -51,16 +52,20 @@ impl FormData {
             // returns Option<H>. Repeatedly remove until None is returned.
             // Note that Headers will be replaced by HeaderMap in hyper 0.12,
             // fix this code then.
-            while filepart.headers.remove::<ContentDisposition>().is_some() { };
+            while filepart.headers.remove(CONTENT_DISPOSITION).is_some() { };
             let filename = match filepart.path.file_name() {
                 Some(fname) => fname.to_string_lossy().into_owned(),
                 None => return Err(Error::NotAFile),
             };
-            filepart.headers.set(ContentDisposition {
-                disposition: DispositionType::Ext("form-data".to_owned()),
-                parameters: vec![DispositionParam::Ext("name".to_owned(), name.clone()),
-                                 DispositionParam::Ext("filename".to_owned(), filename)],
-            });
+            // let content_disposition = ContentDisposition::form_data()
+            //    .with_name("name")
+            //    .with_filename(name.clone());
+            // filepart.headers.insert(CONTENT_DISPOSITION, ContentDisposition);
+            //
+            let val_str = format!(r#"form-data; name="{}"; filename="{}""#, name.clone(), filename);
+            if let Ok(hv) = HeaderValue::from_str(&val_str) {
+                filepart.headers.insert(CONTENT_DISPOSITION, hv);
+            }
             nodes.push( Node::File( filepart ) );
         }
 

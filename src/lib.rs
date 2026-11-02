@@ -47,14 +47,15 @@
 //! extern crate formdata;
 //!
 //! use std::path::Path;
-//! use hyper::header::{Headers, ContentType};
+//! use hyper::header::HeaderMap;
+//! use headers::{ContentType};
 //! use mime::{Mime, TopLevel, SubLevel};
 //! use formdata::{FormData, FilePart};
 //!
 //! fn main() {
 //!   let mut stream = ::std::io::stdout();
-//!   let mut photo_headers = Headers::new();
-//!   photo_headers.set(ContentType(Mime(TopLevel::Image, SubLevel::Gif, vec![])));
+//!   let mut photo_headers = HeaderMap::new();
+//!   photo_headers.typed_insert(ContentType(mime::IMAGE_GIF));
 //!   // no need to set Content-Disposition (in fact it will be rewritten)
 //!
 //!   let formdata = FormData {
@@ -92,13 +93,15 @@ pub use error::Error;
 pub use form_data::FormData;
 
 use std::io::{Read, Write};
-use hyper::header::{Headers, ContentDisposition, DispositionParam};
+use hyper::header::{HeaderMap, HeaderValue, ToStrError, CONTENT_DISPOSITION};
+use headers::ContentDisposition;
 use mime_multipart::Node;
+use content_disposition::{parse_content_disposition, ParsedContentDisposition};
 pub use mime_multipart::FilePart;
 pub use mime_multipart::generate_boundary;
 
 /// Parse MIME `multipart/form-data` information from a stream as a `FormData`.
-pub fn read_formdata<S: Read>(stream: &mut S, headers: &Headers) -> Result<FormData, Error>
+pub fn read_formdata<S: Read>(stream: &mut S, headers: &HeaderMap) -> Result<FormData, Error>
 {
     let nodes = mime_multipart::read_multipart_body(stream, headers, false)?;
 
@@ -117,7 +120,8 @@ fn fill_formdata(formdata: &mut FormData, nodes: Vec<Node>) -> Result<(), Error>
         match node {
             Node::Part(part) => {
                 let cd_name: Option<String> = {
-                    let cd: &ContentDisposition = match part.headers.get() {
+                    // TODO: use structured ContentDisposition instead of HeaderValue
+                    let cd: &HeaderValue = match part.headers.get(CONTENT_DISPOSITION) {
                         Some(cd) => cd,
                         None => return Err(Error::MissingDisposition),
                     };
@@ -129,7 +133,8 @@ fn fill_formdata(formdata: &mut FormData, nodes: Vec<Node>) -> Result<(), Error>
             },
             Node::File(part) => {
                 let cd_name: Option<String> = {
-                    let cd: &ContentDisposition = match part.headers.get() {
+                    // TODO: use structured ContentDisposition instead of HeaderValue
+                    let cd: &HeaderValue = match part.headers.get(CONTENT_DISPOSITION) {
                         Some(cd) => cd,
                         None => return Err(Error::MissingDisposition),
                     };
@@ -140,7 +145,8 @@ fn fill_formdata(formdata: &mut FormData, nodes: Vec<Node>) -> Result<(), Error>
             }
             Node::Multipart((headers, nodes)) => {
                 let cd_name: Option<String> = {
-                    let cd: &ContentDisposition = match headers.get() {
+                    // TODO: use structured ContentDisposition instead of HeaderValue
+                    let cd: &HeaderValue = match headers.get(CONTENT_DISPOSITION) {
                         Some(cd) => cd,
                         None => return Err(Error::MissingDisposition),
                     };
@@ -165,19 +171,44 @@ fn fill_formdata(formdata: &mut FormData, nodes: Vec<Node>) -> Result<(), Error>
     Ok(())
 }
 
+
+// This is slower than splitting the string manually, but supports character encodings, strips quotes, and might have some other nice properties.
+
+// TODO: use headers ContentDisposition struct when it becomes available?
+// TODO: return a Result
 #[inline]
-fn get_content_disposition_name(cd: &ContentDisposition) -> Option<String> {
-    if let Some(&DispositionParam::Ext(_, ref value)) = cd.parameters.iter()
-        .find(|&x| match *x {
-            DispositionParam::Ext(ref token,_) => &*token == "name",
-            _ => false,
-        })
-    {
-        Some(value.clone())
-    } else {
-        None
-    }
+fn get_content_disposition_name(cd: &HeaderValue) -> Option<String> {
+    let cd_or_err: &Result<&str, ToStrError> = match cd.to_str() {
+        Ok(content_disposition_headervalue_text) => {
+            // text is a &str
+            println!("Success: {}", content_disposition_headervalue_text);
+            let parsed_cd: ParsedContentDisposition = parse_content_disposition(content_disposition_headervalue_text);
+            // This is very hacky, should do cleaner error-handling
+            return parsed_cd.name();
+        }
+        Err(e) => {
+            // e is a ToStrError
+            eprintln!("Failed to convert: {}", e);
+            return None;
+        }
+    };
 }
+
+// Previous code using ContentDisposition struct which is not fully implemented 
+// for formdata in headers crate.
+// #[inline]
+// fn get_content_disposition_name(cd: &ContentDisposition) -> Option<String> {
+//     if let Some(&DispositionParam::Ext(_, ref value)) = cd.parameters.iter()
+//         .find(|&x| match *x {
+//             DispositionParam::Ext(ref token,_) => &*token == "name",
+//             _ => false,
+//         })
+//     {
+//         Some(value.clone())
+//     } else {
+//         None
+//     }
+// }
 
 
 /// Stream out `multipart/form-data` body content matching the passed in `formdata`.  This
