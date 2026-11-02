@@ -5,7 +5,7 @@ use mime_multipart::{Node, Part, FilePart};
 use hyper::header::{Headers, ContentDisposition, DispositionParam, DispositionType,
                     ContentType};
 use mime::{Mime, TopLevel, SubLevel};
-use error::Error;
+use crate::error::Error;
 
 /// The extracted text fields and uploaded files from a `multipart/form-data` request.
 ///
